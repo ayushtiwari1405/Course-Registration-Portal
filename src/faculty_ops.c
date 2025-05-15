@@ -1,5 +1,6 @@
 #include "academia.h"
 
+// Adds a new course to the COURSE_FILE.
 void add_course(int client_sock, const char *faculty) {
     char course_id[32], course_name[64], seats[8];
 
@@ -63,6 +64,7 @@ void add_course(int client_sock, const char *faculty) {
     sender(client_sock, "Course added.");
 }
 
+// Removes a course from the COURSE_FILE.
 void remove_course(int client_sock, const char *faculty) {
     char course_id[32];
     sender(client_sock, "Enter course id to remove:");
@@ -118,6 +120,7 @@ void remove_course(int client_sock, const char *faculty) {
     sender(client_sock, "Course removed.");
 }
 
+// Updates the details of an existing course in COURSE_FILE.
 void update_course_details(int client_sock, const char *faculty) {
     char course_id[32], new_name[64], new_seats[8];
     sender(client_sock, "Enter course id to update:");
@@ -128,7 +131,7 @@ void update_course_details(int client_sock, const char *faculty) {
     receiver(client_sock, new_seats, sizeof(new_seats));
 
     sem_wait(file_sem);
-    
+
     int fd = open(COURSE_FILE, O_RDWR);
     if (fd < 0) {
         sem_post(file_sem);
@@ -173,14 +176,15 @@ void update_course_details(int client_sock, const char *faculty) {
     }
     fsync(fd);
     close(fd);
-    
+
     sem_post(file_sem);
     sender(client_sock, "Course details updated.");
 }
 
+// Views the courses offered by the logged-in faculty.
 void view_offering_courses(int client_sock, const char *faculty) {
     sem_wait(file_sem);
-    
+
     int fd = open(COURSE_FILE, O_RDONLY);
     if (fd < 0) {
         sem_post(file_sem);
@@ -209,10 +213,11 @@ void view_offering_courses(int client_sock, const char *faculty) {
 
     close(fd);
     sem_post(file_sem);
-    
+
     sender(client_sock, strlen(msg) > 0 ? msg : "No offering courses.");
 }
 
+// Processes the faculty's choice of action.
 int process_faculty(int client_sock, int choice, const char *username) {
     switch (choice) {
         case 1: view_offering_courses(client_sock, username); break;

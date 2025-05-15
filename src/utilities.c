@@ -2,6 +2,7 @@
 
 sem_t *file_sem;
 
+// Initializes the file semaphore for controlling access to user and course files.
 void init_file_semaphore() {
     sem_unlink("/file_sem");
     file_sem = sem_open("/file_sem", O_CREAT | O_EXCL, 0644, 1);
@@ -11,6 +12,7 @@ void init_file_semaphore() {
     }
 }
 
+// Trims the trailing newline character from a string if present.
 void trim_newline(char *str) {
     size_t len = strlen(str);
     if (len > 0 && str[len - 1] == '\n') {
@@ -18,18 +20,20 @@ void trim_newline(char *str) {
     }
 }
 
+// Cleans up the file semaphore by closing and unlinking it.
 void cleanup_file_semaphore() {
     sem_close(file_sem);
     sem_unlink("/file_sem");
 }
 
+// Allows a user to change their password.
 void password_change(int client_sock, const char *username, const char *role) {
-    char  newpass[64];
+    char newpass[64];
     sender(client_sock, "Enter new password:");
     receiver(client_sock, newpass, sizeof(newpass));
 
     sem_wait(file_sem);
-    
+
     int fd = open(USER_FILE, O_RDWR);
     if (fd < 0) {
         sem_post(file_sem);
@@ -48,18 +52,18 @@ void password_change(int client_sock, const char *username, const char *role) {
         count++;
     }
 
-    // Read and process remaining lines
+    // Read and process remaining lines to update password
     while (safe_read_line(fd, lines[count], sizeof(lines[count])) > 0) {
-        char funame[64], frole[16], fpass[64]; 
+        char funame[64], frole[16], fpass[64];
         int active;
 
         if (sscanf(lines[count], "%63[^|]|%15[^|]|%63[^|]|%d", funame, frole, fpass, &active) == 4) {
             if (strcmp(frole, role) == 0 && strcmp(funame, username) == 0) {
-                snprintf(lines[count], sizeof(lines[count]), "%s|%s|%s|%d\n", 
+                snprintf(lines[count], sizeof(lines[count]), "%s|%s|%s|%d\n",
                          funame, frole, newpass, active);
                 found = 1;
             } else {
-                snprintf(lines[count], sizeof(lines[count]), "%s|%s|%s|%d\n", 
+                snprintf(lines[count], sizeof(lines[count]), "%s|%s|%s|%d\n",
                          funame, frole, fpass, active);
             }
         }
@@ -73,7 +77,7 @@ void password_change(int client_sock, const char *username, const char *role) {
         return;
     }
 
-    // Rewrite updated content to file
+    // Rewrite updated content to the user file
     ftruncate(fd, 0);
     lseek(fd, 0, SEEK_SET);
     for (int i = 0; i < count; i++) {
@@ -81,11 +85,12 @@ void password_change(int client_sock, const char *username, const char *role) {
     }
     fsync(fd);
     close(fd);
-    
+
     sem_post(file_sem);
     sender(client_sock, "User updated.");
 }
 
+// Safely reads a line from a file descriptor, stopping at a newline or EOF.
 ssize_t safe_read_line(int fd, char *buf, size_t maxlen) {
     size_t i = 0;
     char c;

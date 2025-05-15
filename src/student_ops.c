@@ -1,5 +1,8 @@
 #include "academia.h"
 
+#define BUFF_SIZE 1024
+
+// Enrolls a student in a course by adding their name to the course's enrolled list.
 void enroll_course(int client_sock, const char *student) {
     char course_id[32];
     sender(client_sock, "Enter course ID to enroll:");
@@ -19,26 +22,13 @@ void enroll_course(int client_sock, const char *student) {
 
     // Read and preserve header line
     if (safe_read_line(fd, lines[count], sizeof(lines[count])) > 0) {
-        // Make sure header ends with newline
-        size_t len = strlen(lines[count]);
-        if (len == 0 || lines[count][len - 1] != '\n') {
-            lines[count][len] = '\n';
-            lines[count][len + 1] = '\0';
-        }
+        if (lines[count][strlen(lines[count]) - 1] != '\n') strcat(lines[count], "\n");
         count++;
     }
 
     while (safe_read_line(fd, lines[count], sizeof(lines[count]) - 2) > 0) {
-        // Skip empty lines
-        if (lines[count][0] == '\n' || lines[count][0] == '\0')
-            continue;
-
-        // Ensure line ends with newline
-        size_t len = strlen(lines[count]);
-        if (len == 0 || lines[count][len - 1] != '\n') {
-            lines[count][len] = '\n';
-            lines[count][len + 1] = '\0';
-        }
+        if (lines[count][0] == '\n' || lines[count][0] == '\0') continue;
+        if (lines[count][strlen(lines[count]) - 1] != '\n') strcat(lines[count], "\n");
 
         char cid[32], cname[64], cfac[64], cseats[8], enrolled[256] = {0};
         sscanf(lines[count], "%31[^|]|%63[^|]|%63[^|]|%7[^|]|%255[^\n]", cid, cname, cfac, cseats, enrolled);
@@ -92,11 +82,7 @@ void enroll_course(int client_sock, const char *student) {
     lseek(fd, 0, SEEK_SET);
     for (int i = 0; i < count; i++) {
         if (lines[i][0] != '\0') {
-            size_t len = strlen(lines[i]);
-            if (len == 0 || lines[i][len - 1] != '\n') {
-                lines[i][len] = '\n';
-                lines[i][len + 1] = '\0';
-            }
+            if (lines[i][strlen(lines[i]) - 1] != '\n') strcat(lines[i], "\n");
             write(fd, lines[i], strlen(lines[i]));
         }
     }
@@ -107,6 +93,7 @@ void enroll_course(int client_sock, const char *student) {
     sender(client_sock, "Enrolled successfully.");
 }
 
+// Unenrolls a student from a course by removing their name from the enrolled list.
 void unenroll_course(int client_sock, const char *student) {
     char course_id[32];
     sender(client_sock, "Enter course id to unenroll:");
@@ -122,7 +109,6 @@ void unenroll_course(int client_sock, const char *student) {
 
     char lines[100][1024];
     int count = 0, found = 0, changed = 0;
-
     char line[1024];
     int header_handled = 0;
 
@@ -131,31 +117,21 @@ void unenroll_course(int client_sock, const char *student) {
 
         if (!header_handled) {
             if (strncmp(line, "CourseID", 8) == 0) {
-                // Valid header, copy as is
                 snprintf(lines[count++], sizeof(lines[0]), "%s\n", line);
             } else {
-                // No header present, insert it before first course
                 snprintf(lines[count++], sizeof(lines[0]), "CourseID|CourseName|Faculty|Seats|EnrolledList\n");
-
-                // Now process this first line as course
-                // continue below
             }
             header_handled = 1;
-            if (strncmp(line, "CourseID", 8) == 0)
-                continue; // Don't reprocess header line as course
+            if (strncmp(line, "CourseID", 8) == 0) continue;
         }
 
-        // Parse and process course entry
         char cid[32], cname[64], cfac[64], cseats[8], enrolled_list[256] = "";
         int fields = sscanf(line, "%31[^|]|%63[^|]|%63[^|]|%7[^|]|%255[^\n]",
                             cid, cname, cfac, cseats, enrolled_list);
-
-        if (fields < 4) continue; // Skip malformed
+        if (fields < 4) continue;
 
         if (strcmp(cid, course_id) == 0) {
             found = 1;
-
-            // Remove student from enrolled list
             char new_enrolled[256] = "";
             char enrolled_copy[256];
             strncpy(enrolled_copy, enrolled_list, sizeof(enrolled_copy));
@@ -185,7 +161,6 @@ void unenroll_course(int client_sock, const char *student) {
                      cid, cname, cfac, cseats, new_enrolled);
             changed = 1;
         } else {
-            // Preserve unmodified line
             snprintf(lines[count++], sizeof(lines[0]), "%s\n", line);
         }
     }
@@ -204,7 +179,6 @@ void unenroll_course(int client_sock, const char *student) {
         return;
     }
 
-    // Rewrite file safely
     ftruncate(fd, 0);
     lseek(fd, 0, SEEK_SET);
     for (int i = 0; i < count; i++) {
@@ -217,9 +191,10 @@ void unenroll_course(int client_sock, const char *student) {
     sender(client_sock, "Unenrolled successfully.");
 }
 
+// Views the courses the student is currently enrolled in.
 void view_enrolled_courses(int client_sock, const char *student) {
     sem_wait(file_sem);
-    
+
     int fd = open(COURSE_FILE, O_RDONLY);
     if (fd < 0) {
         sem_post(file_sem);
@@ -230,47 +205,42 @@ void view_enrolled_courses(int client_sock, const char *student) {
     char line[1024], msg[BUFF_SIZE] = "";
     lseek(fd, 0, SEEK_SET);
     while (safe_read_line(fd, line, sizeof(line)) > 0) {
-        // Skip header and empty lines
-        if (strncmp(line, "CourseID", 8) == 0 || line[0] == '\n' || line[0] == '\0') {
-            continue;
-        }
+        if (strncmp(line, "CourseID", 8) == 0 || line[0] == '\n' || line[0] == '\0') continue;
 
         char cid[32], cname[64], cfac[64], cseats[8], enrolled_list[256] = "";
         sscanf(line, "%31[^|]|%63[^|]|%63[^|]|%7[^|]|%255[^\n]", cid, cname, cfac, cseats, enrolled_list);
 
-        if (strlen(enrolled_list) == 0) {
-            continue; // no students enrolled
-        }
+        if (strlen(enrolled_list) > 0) {
+            char enrolled_copy[256];
+            strncpy(enrolled_copy, enrolled_list, sizeof(enrolled_copy) - 1);
+            enrolled_copy[sizeof(enrolled_copy) - 1] = '\0';
 
-        // Copy enrolled_list to avoid modifying original line string with strtok
-        char enrolled_copy[256];
-        strncpy(enrolled_copy, enrolled_list, sizeof(enrolled_copy) - 1);
-        enrolled_copy[sizeof(enrolled_copy) - 1] = '\0';
-
-        char *tok = strtok(enrolled_copy, ",");
-        while (tok) {
-            if (strcmp(tok, student) == 0) {
-                char tmp[256];
-                snprintf(tmp, sizeof(tmp), "%s (%s)\n", cname, cid);
-                strcat(msg, tmp);
-                break;  // no need to check further tokens for this course
+            char *tok = strtok(enrolled_copy, ",");
+            while (tok) {
+                if (strcmp(tok, student) == 0) {
+                    char tmp[256];
+                    snprintf(tmp, sizeof(tmp), "%s (%s)\n", cname, cid);
+                    strcat(msg, tmp);
+                    break;
+                }
+                tok = strtok(NULL, ",");
             }
-            tok = strtok(NULL, ",");
         }
     }
 
     close(fd);
     sem_post(file_sem);
-    
+
     if (strlen(msg) == 0)
         sender(client_sock, "No enrolled courses.");
     else
         sender(client_sock, msg);
 }
 
+// Views all available courses in the COURSE_FILE.
 void view_all_courses(int client_sock) {
     sem_wait(file_sem);
-    
+
     int fd = open(COURSE_FILE, O_RDONLY);
     if (fd < 0) {
         sem_post(file_sem);
@@ -291,11 +261,12 @@ void view_all_courses(int client_sock) {
 
     close(fd);
     sem_post(file_sem);
-    
+
     if (strlen(msg) == 0) sender(client_sock, "No courses available.");
     else sender(client_sock, msg);
 }
 
+// Processes the student's choice of action.
 int process_student(int client_sock, int choice, const char *username) {
     switch (choice) {
         case 1: view_all_courses(client_sock); break;

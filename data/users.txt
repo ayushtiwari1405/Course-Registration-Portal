@@ -1,6 +1,4 @@
 Username|Role|Password|Status
 admin1|admin|admins|1
 admin2|admin|admina|1
-stu1|student|hum|1
-stu2|student|lola|1
-fac1|faculty|facts|1
+
