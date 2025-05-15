@@ -1,0 +1,4 @@
+CourseID|CourseName|Faculty|Seats|EnrolledList
+101|Os|fac1|120|stu1,stu2
+102|Physics|fac1|160|stu2
+104|DM|fac1|120|
